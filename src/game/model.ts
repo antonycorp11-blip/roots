@@ -106,6 +106,8 @@ export interface Reinforcement {
   faction: Faction;
   kind: UnitKind;
   remaining: number;
+  x: number;
+  y: number;
 }
 
 export interface Economy {

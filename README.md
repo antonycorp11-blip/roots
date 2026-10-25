@@ -17,5 +17,7 @@ Para gerar a versão de produção: `npm run build`.
 - Câmera: botão direito ou `Espaço` + arrastar; no celular, arraste uma área vazia. Use scroll ou pinça para zoom.
 - Combate: clique/toque em tropas para selecionar e no terreno/inimigo para ordenar. Arraste com o mouse para seleção em grupo.
 - Ordens: `Q` avançar, `W` atacar, `E` defender, `R` manter, `T` retornar e `F` centralizar na batalha.
-- Reforços e construções: use as cartas na barra inferior. Construções só entram em plataformas laterais dentro de território aliado.
+- Reforços: escolha uma carta durante a batalha e marque o ponto de entrada no território verde ao sul.
+- Construções: escolha a carta e depois uma plataforma lateral dentro de território aliado.
 - Minimap: clique, toque ou arraste para navegar.
+- Zoom: use scroll, pinça, os botões `−`/`+` no minimapa ou as teclas `-`/`+`.
