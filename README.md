@@ -13,7 +13,7 @@ Para gerar a versão de produção: `npm run build`.
 
 ## Controles
 
-- Posicionamento: escolha uma carta e clique/toque na zona verde; arraste tropas para reposicioná-las.
+- Preparação: use 600 pontos para posicionar torres, muros e bosques em território aliado. Toque numa construção para removê-la com reembolso integral. Esse orçamento é separado das moedas da batalha.
 - Câmera: botão direito ou `Espaço` + arrastar; no celular, arraste uma área vazia. Use scroll ou pinça para zoom.
 - Combate: clique/toque em tropas para selecionar e no terreno/inimigo para ordenar. Arraste com o mouse para seleção em grupo.
 - Ordens: `Q` avançar, `W` atacar, `E` defender, `R` manter, `T` retornar e `F` centralizar na batalha.
@@ -27,3 +27,5 @@ Para gerar a versão de produção: `npm run build`.
 Pixel art original definida em `src/game/pixelArt.ts`: silhuetas por classe, paletas por facção e texturas procedurais em cache. Os retratos das cartas usam os mesmos sprites do campo. Não há downloads de imagens.
 
 As frentes começam separadas por quatro linhas neutras. Renda inicial aproximada: 3,5 moedas/s. O limite técnico de segurança é de 240 unidades por facção; desempenho nesse limite ainda precisa de medição em aparelhos reais.
+
+Ao iniciar, cada lado recebe cinco tropas; reforços adicionais são recrutados durante o combate. As defesas inimigas ficam ocultas até o início. Muros adjacentes bloqueiam inimigos, torres cobrem a frente e bosques curam aliados. Vitória e derrota ocorrem exclusivamente pela destruição de um núcleo: controlar território só aumenta a renda.

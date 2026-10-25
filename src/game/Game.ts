@@ -138,6 +138,8 @@ export class Game {
     this.corruptionDominance = 0;
     this.playerKills = 0;
     this.enemyKills = 0;
+    this.captureClock=0;this.aiClock=0;this.hudClock=0;this.accumulator=0;
+    this.toastTimer=0;$<HTMLElement>('#toast').classList.remove('show');
     this.economy = {
       nature: { coins: CFG.startingCoins, generated: 0, income: 0, tiles: 0 },
       corruption: { coins: CFG.startingCoins, generated: 0, income: 0, tiles: 0 },
@@ -156,8 +158,7 @@ export class Game {
     }
 
     this.buildings.push(this.createCore('corruption'), this.createCore('nature'));
-    this.deployStarterArmy('nature');
-    this.deployEnemyArmy();
+    this.prepareEnemyDefenses();
     this.recountTerritory();
     this.resize();
     const fitWidth = this.minimumZoom();
@@ -182,12 +183,26 @@ export class Game {
 
   private deployStarterArmy(faction: Faction) {
     const rowY = WORLD_H - CFG.tile * (CFG.initialRows - 2);
-    const starters: UnitKind[] = ['warrior', 'warrior', 'archer'];
+    const starters: UnitKind[] = ['warrior', 'warrior', 'archer', 'scout', 'guardian'];
     starters.forEach((kind, i) => {
-      const unit = this.createUnit(faction, kind, WORLD_W / 2 + (i - 1) * 58, rowY + Math.abs(i - 1) * 25);
+      const unit = this.createUnit(faction, kind, WORLD_W / 2 + (i - 2) * 58, rowY + Math.abs(i - 2) * 25);
+      while(this.buildings.some(b=>dist2(b,unit)<65**2) && unit.y<WORLD_H-150) unit.y+=44;
       this.units.push(unit);
-      if (faction === 'nature') this.prepRemaining -= UNIT_DEFS.nature[kind].prepCost;
     });
+  }
+
+  private prepareEnemyDefenses() {
+    let budget: number = CFG.prepPoints;
+    const layout: {kind: BuildingKind; dx: number; row: number}[] = [
+      {kind:'tower',dx:-3,row:20},{kind:'tower',dx:3,row:20},
+      {kind:'barrier',dx:-1,row:21},{kind:'barrier',dx:0,row:21},{kind:'barrier',dx:1,row:21},
+      {kind:'grove',dx:0,row:18},{kind:'tower',dx:0,row:6},{kind:'barrier',dx:2,row:5},
+    ];
+    for(const item of layout) {
+      const def=BUILDING_DEFS[item.kind]; if(budget<def.cost) continue;
+      budget-=def.cost;
+      this.buildings.push({id:this.nextId++,faction:'corruption',kind:item.kind,x:(CFG.cols/2+item.dx+.5)*CFG.tile,y:(item.row+.5)*CFG.tile,hp:def.hp,maxHp:def.hp,build:1,cooldown:0,slotId:-1,hitFlash:0});
+    }
   }
 
   private deployEnemyArmy() {
@@ -232,6 +247,10 @@ export class Game {
     this.minimap.addEventListener('pointermove', event => { if (event.buttons) this.navigateMinimap(event); });
 
     $<HTMLButtonElement>('#startBattle').addEventListener('click', () => this.beginBattle());
+    $<HTMLButtonElement>('#enemyCore').addEventListener('click', () => {
+      this.camera.x=WORLD_W/2-this.width/this.camera.zoom/2;
+      this.camera.y=0; this.clampCamera();
+    });
     $<HTMLButtonElement>('#restart').addEventListener('click', () => this.reset());
     $<HTMLButtonElement>('#centerBattle').addEventListener('click', () => this.centerBattle());
     $<HTMLButtonElement>('#zoomOut').addEventListener('click', () => this.zoomAt(this.width / 2, this.height / 2, .82));
@@ -362,12 +381,13 @@ export class Game {
   private handleTap(world: Vec, additive = false) {
     if (this.phase === 'ended') return;
     if (this.phase === 'prep') {
-      if (this.selectedCard?.type === 'unit') this.placePrepUnit(world, this.selectedCard.kind);
-      else {
-        const hit = this.findUnitAt(world, 'nature');
-        this.units.forEach(unit => unit.selected = false);
-        if (hit) hit.selected = true;
-      }
+      const placed=this.buildings.find(b=>b.faction==='nature' && b.kind!=='core' && dist2(b,world)<28**2);
+      if(placed && placed.kind!=='core') {
+        this.prepRemaining+=BUILDING_DEFS[placed.kind].cost;
+        this.buildings=this.buildings.filter(b=>b!==placed);
+        const slot=this.slots.find(s=>s.occupied===placed.id); if(slot) slot.occupied=null;
+        this.renderCards();this.toast('Construção removida — orçamento devolvido');
+      } else if(this.selectedCard?.type==='building') this.tryBuild(this.selectedCard.kind,world,'nature');
       return;
     }
 
@@ -422,8 +442,9 @@ export class Game {
 
   private beginBattle() {
     if (this.phase !== 'prep') return;
-    if (!this.units.some(unit => unit.faction === 'nature')) return this.toast('Posicione ao menos uma unidade');
     this.phase = 'battle';
+    this.deployStarterArmy('nature');
+    this.deployEnemyArmy();
     this.units.forEach(unit => {
       const direction = unit.faction === 'nature' ? -1 : 1;
       unit.order = 'advance';
@@ -433,7 +454,7 @@ export class Game {
     this.prepPanel.classList.add('hidden');
     this.selectedCard = null;
     this.renderCards();
-    this.toast('Os exércitos foram revelados — a batalha começou!');
+    this.toast('Defesas reveladas. Recrute tropas e destrua o núcleo ao norte!');
     this.beep(180, .14);
     setTimeout(() => this.beep(260, .12), 140);
   }
@@ -469,19 +490,22 @@ export class Game {
   }
 
   private renderCards() {
+    this.cardsEl.classList.toggle('defense-deck',this.phase==='prep');
     const fragments: string[] = [];
-    for (const kind of unitKinds) {
+    for (const kind of this.phase === 'prep' ? [] : unitKinds) {
       const def = UNIT_DEFS.nature[kind];
       const cost = this.phase === 'prep' ? `${def.prepCost} pts` : `${def.coinCost}`;
       const disabled = this.phase === 'prep' ? this.prepRemaining < def.prepCost : this.economy.nature.coins < def.coinCost;
       const active = this.selectedCard?.type === 'unit' && this.selectedCard.kind === kind;
       fragments.push(`<button class="card unit-card ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}" data-type="unit" data-kind="${kind}"><span class="card-visual">${this.cardPortrait(kind)}</span><span class="card-copy"><b>${def.name}</b><small>${this.phase === 'prep' ? `PREPARAÇÃO · ${def.hp} VIDA` : `${def.mobilize}s · ${def.damage} DANO`}</small></span><span class="cost"><i>◆</i>${cost}</span><span class="cooldown hidden"></span></button>`);
     }
-    if (this.phase === 'battle') {
+    if (this.phase !== 'ended') {
       for (const kind of buildingKinds) {
         const def = BUILDING_DEFS[kind];
         const active = this.selectedCard?.type === 'building' && this.selectedCard.kind === kind;
-        fragments.push(`<button class="card build ${this.economy.nature.coins < def.cost ? 'disabled' : ''} ${active ? 'active' : ''}" data-type="building" data-kind="${kind}"><span class="card-visual">${this.cardPortrait(kind)}</span><span class="card-copy"><b>${def.name}</b><small>CONSTRUÇÃO · ${def.hp} VIDA</small></span><span class="cost"><i>◆</i>${def.cost}</span></button>`);
+        const budget=this.phase==='prep'?this.prepRemaining:this.economy.nature.coins;
+        const effect=kind==='tower'?'ATAQUE À DISTÂNCIA':kind==='barrier'?'BLOQUEIA INIMIGOS':'CURA ALIADOS';
+        fragments.push(`<button class="card build ${budget < def.cost ? 'disabled' : ''} ${active ? 'active' : ''}" data-type="building" data-kind="${kind}"><span class="card-visual">${this.cardPortrait(kind)}</span><span class="card-copy"><b>${def.name}</b><small>${effect}</small></span><span class="cost"><i>◆</i>${def.cost}</span></button>`);
       }
     }
     this.cardsEl.innerHTML = fragments.join('');
@@ -541,21 +565,22 @@ export class Game {
   private tryBuild(kind: BuildingKind, world: Vec, faction: Faction) {
     const slot = this.findSlotAt(world);
     const def = BUILDING_DEFS[kind];
-    if (!slot || !this.validBuildSlot(slot, faction)) return faction === 'nature' && this.toast('Plataforma inválida: conquiste o território ao redor');
-    if (this.economy[faction].coins < def.cost) return faction === 'nature' && this.toast('Moedas insuficientes');
-    this.economy[faction].coins -= def.cost;
-    const building: Building = { id: this.nextId++, faction, kind, x: slot.x, y: slot.y, hp: def.hp, maxHp: def.hp, build: 0, cooldown: 0, slotId: slot.id, hitFlash: 0 };
+    if (!slot || !this.validBuildSlot(slot, faction)) return faction === 'nature' && this.toast('Escolha terreno aliado livre, sem sobrepor estruturas');
+    const preparing=this.phase==='prep' && faction==='nature';
+    if ((preparing?this.prepRemaining:this.economy[faction].coins) < def.cost) return faction === 'nature' && this.toast(preparing?'Orçamento insuficiente':'Moedas insuficientes');
+    if(preparing) this.prepRemaining-=def.cost; else this.economy[faction].coins -= def.cost;
+    const building: Building = { id: this.nextId++, faction, kind, x: slot.x, y: slot.y, hp: def.hp, maxHp: def.hp, build: preparing?1:0, cooldown: 0, slotId: slot.id, hitFlash: 0 };
     slot.occupied = building.id;
     this.buildings.push(building);
-    this.selectedCard = null;
+    if(!preparing) this.selectedCard = null;
     this.spawnBurst(slot, faction === 'nature' ? '#b9e879' : '#b56ae0', 14, 'dust');
-    if (faction === 'nature') { this.toast(`${def.name} em construção`); this.beep(290, .08); this.renderCards(); }
+    if (faction === 'nature') { this.toast(`${def.name} ${preparing?'posicionada — toque novamente para remover':'em construção'}`); this.beep(290, .08); this.renderCards(); }
   }
 
   private validBuildSlot(slot: BuildSlot, faction: Faction) {
     if (slot.occupied !== null) return false;
     const tile = this.tileAt(slot.x, slot.y);
-    return tile?.owner === faction && !this.buildings.some(b => dist2(b, slot) < 65 ** 2) && !this.units.some(u => !u.dead && dist2(u, slot) < 28 ** 2);
+    return tile?.owner === faction && !this.buildings.some(b => dist2(b, slot) < (b.kind==='core'?90:40) ** 2) && !this.units.some(u => !u.dead && dist2(u, slot) < 28 ** 2);
   }
 
   private findSlotAt(world: Vec) {
@@ -836,6 +861,11 @@ export class Game {
     }
     unit.targetId = bestId;
 
+    if(!bestId && unit.order==='advance' && (unit.faction==='nature'?unit.y<CFG.tile*12:unit.y>WORLD_H-CFG.tile*12)) {
+      const core=this.buildings.find(b=>b.kind==='core'&&b.faction!==unit.faction);
+      if(core) unit.orderTarget={x:core.x,y:core.y};
+    }
+
     if (!bestId && unit.order === 'advance' && dist2(unit, unit.orderTarget) < 45 ** 2) {
       const direction = unit.faction === 'nature' ? -1 : 1;
       unit.orderTarget = {
@@ -861,6 +891,10 @@ export class Game {
       const minDistance = building.kind === 'core' ? 42 : building.kind === 'barrier' ? 32 : 23;
       const bx = unit.x - building.x, by = unit.y - building.y;
       const bd = Math.hypot(bx, by);
+      if(building.kind==='barrier' && building.faction!==unit.faction && bd<minDistance+def.radius+4) {
+        unit.targetId=building.id;
+        return;
+      }
       if (bd < minDistance + def.radius && building.faction === unit.faction) {
         dx += (bx / Math.max(1, bd)) * 1.3;
         dy += (by / Math.max(1, bd)) * 1.3;
@@ -1081,13 +1115,6 @@ export class Game {
     const corruptionCore = this.buildings.find(building => building.kind === 'core' && building.faction === 'corruption')!;
     if (corruptionCore.hp <= 0) return this.endGame('nature', 'O núcleo da Corrupção foi destruído');
     if (natureCore.hp <= 0) return this.endGame('corruption', 'O Coração da Floresta foi destruído');
-    const total = CFG.cols * CFG.rows;
-    const natureShare = this.economy.nature.tiles / total;
-    const corruptionShare = this.economy.corruption.tiles / total;
-    this.natureDominance = natureShare >= CFG.victoryShare ? this.natureDominance + dt : 0;
-    this.corruptionDominance = corruptionShare >= CFG.victoryShare ? this.corruptionDominance + dt : 0;
-    if (this.natureDominance >= CFG.victoryHold) this.endGame('nature', 'A Natureza manteve 70% do território');
-    else if (this.corruptionDominance >= CFG.victoryHold) this.endGame('corruption', 'A Corrupção manteve 70% do território');
   }
 
   private endGame(winner: Faction, reason: string) {
@@ -1108,6 +1135,9 @@ export class Game {
   }
 
   private updateHud() {
+    const own=this.buildings.find(b=>b.kind==='core'&&b.faction==='nature');
+    const enemy=this.buildings.find(b=>b.kind==='core'&&b.faction==='corruption');
+    $<HTMLElement>('#coreStatus').textContent=this.phase==='prep'?'600 pontos para fortificar. Exércitos chegam ao iniciar. Território gera renda, não vitória.':`Seu núcleo: ${Math.max(0,Math.ceil(own?.hp??0))} / ${CFG.coreHp} · Inimigo: ${Math.max(0,Math.ceil(enemy?.hp??0))} / ${CFG.coreHp}`;
     const eco = this.economy.nature;
     this.coinsEl.textContent = `${Math.floor(eco.coins)}`;
     this.incomeEl.textContent = `+${eco.income.toFixed(1)}/s`;
@@ -1191,7 +1221,7 @@ export class Game {
       ctx.imageSmoothingEnabled=false;
       ctx.drawImage(sprite('tree',tile.visual>0?'nature':'corruption'),p.x-36,p.y-42,72,72);
     }
-    for (const building of this.buildings) if (this.visible(building, bounds, 70)) this.drawBuilding(ctx, building);
+    for (const building of this.buildings) if (this.visible(building, bounds, 70) && (this.phase!=='prep'||building.faction==='nature'||building.kind==='core')) this.drawBuilding(ctx, building);
     for (const projectile of this.projectiles) if (this.visible(projectile, bounds, 10)) this.drawProjectile(ctx, projectile);
     const visibleUnits = this.units.filter(unit => this.visible(unit, bounds, 30) && (this.phase !== 'prep' || unit.faction === 'nature'));
     visibleUnits.sort((a, b) => a.y - b.y);
@@ -1200,7 +1230,7 @@ export class Game {
 
     if (this.dragSelectStart && this.dragSelectCurrent) this.drawSelectionBox(ctx, this.dragSelectStart, this.dragSelectCurrent);
     if (this.phase === 'prep') this.drawDeploymentZone(ctx);
-    if (this.phase === 'battle' && this.selectedCard?.type === 'building') this.drawBuildPreview(ctx, this.selectedCard.kind);
+    if (this.selectedCard?.type === 'building') this.drawBuildPreview(ctx, this.selectedCard.kind);
     if (this.phase === 'battle' && this.selectedCard?.type === 'unit') this.drawReinforcementZone(ctx);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.drawScreenVignette(ctx);
@@ -1304,13 +1334,20 @@ export class Game {
   private drawBuildPreview(ctx: CanvasRenderingContext2D, kind: BuildingKind) {
     const slot = this.hoveredSlot;
     if (!slot || slot.occupied !== null) return;
-    const valid = this.validBuildSlot(slot, 'nature') && this.economy.nature.coins >= BUILDING_DEFS[kind].cost;
+    const valid = this.validBuildSlot(slot, 'nature') && (this.phase==='prep'?this.prepRemaining:this.economy.nature.coins) >= BUILDING_DEFS[kind].cost;
     ctx.save(); ctx.globalAlpha = .58; this.drawBuildingShape(ctx, { id: -1, faction: 'nature', kind, x: slot.x, y: slot.y, hp: 1, maxHp: 1, build: 1, cooldown: 0, slotId: slot.id, hitFlash: 0 }); ctx.restore();
     ctx.strokeStyle = valid ? '#a9e36f' : '#ef6e6e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(slot.x, slot.y, BUILDING_DEFS[kind].range || 29, 0, Math.PI * 2); ctx.stroke();
   }
 
   private drawBuilding(ctx: CanvasRenderingContext2D, building: Building) {
     ctx.save();
+    if(building.kind==='core') {
+      ctx.fillStyle=building.faction==='nature'?'#d5edb4':'#ecc4eb';ctx.font='bold 12px monospace';ctx.textAlign='center';
+      ctx.fillText(building.faction==='nature'?'CORAÇÃO DA FLORESTA':'NÚCLEO DA CORRUPÇÃO',building.x,building.y-66);
+    }
+    if(this.phase==='prep' && building.kind!=='core' && building.kind!=='barrier') {
+      ctx.strokeStyle='#c9dfa52c';ctx.lineWidth=1;ctx.setLineDash([4,6]);ctx.beginPath();ctx.arc(building.x,building.y,BUILDING_DEFS[building.kind].range,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+    }
     if (building.hp <= 0) ctx.globalAlpha = .3;
     this.drawBuildingShape(ctx, building);
     if (building.build < 1) {

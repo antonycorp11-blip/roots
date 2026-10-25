@@ -149,6 +149,14 @@ button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent
 }
 
 /* Moss & Moon pixel-fantasy frames. */
+#app .defense-deck .card { width:155px;min-width:155px; }
+#app .defense-deck .card-copy small { font-size:8px; }
+@media(max-height:650px){#app .defense-deck .card{width:115px;min-width:115px;} }
+#objective { position:absolute;right:12px;top:82px;z-index:4;width:min(380px,34vw);padding:10px 12px;background:#14272bea;border:1px solid #788767;color:#dfd6b4;font-size:10px;box-shadow:2px 3px #08191e88; }
+#objective b { display:block;font-size:10px;letter-spacing:.6px; }
+#objective span { display:block;margin:6px 0;line-height:1.5;color:#b9c6b5; }
+#enemyCore { background:#2b413d;border:1px solid #8c9a77;color:#efdfb5;padding:5px 9px;cursor:pointer;font-size:10px; }
+@media(max-height:650px),(max-width:980px){#objective{top:58px;padding:5px 8px;width:32vw;}#objective b{font-size:8px;}#objective span{font-size:8px;margin:3px 0;}#enemyCore{font-size:8px;padding:3px 5px;}#app .panel{max-width:62vw;} }
 #app { background: #101e25; }
 #app #topbar { border-radius: 2px; border-color: #7d8b71; background: #182d30; box-shadow: 0 4px 0 #081719, inset 0 0 0 3px #293f3d; }
 #app .brand b { color: #e5d7a5; letter-spacing: 5px; }

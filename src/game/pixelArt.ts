@@ -130,7 +130,17 @@ export function sprite(kind: string, faction: Faction = 'nature'): HTMLCanvasEle
   } else {
     // Stepped stone, timber and foliage for structures.
     ctx.fillStyle = palette.o; ctx.fillRect(5,24,23,4);
-    if (kind === 'tower' || kind === 'core') {
+    if(kind==='core') {
+      // Ancient living heart: exposed roots, layered crown and luminous seed.
+      ctx.fillStyle=palette.o;ctx.fillRect(2,23,28,6);ctx.fillRect(5,5,23,17);
+      ctx.fillStyle=palette.a;ctx.fillRect(12,13,9,14);ctx.fillRect(7,23,19,4);ctx.fillRect(3,26,8,3);ctx.fillRect(24,25,6,3);
+      ctx.fillStyle=palette.h;ctx.fillRect(13,15,2,10);ctx.fillRect(18,18,2,8);
+      ctx.fillStyle=palette.g;ctx.fillRect(3,9,27,8);ctx.fillRect(6,5,21,13);ctx.fillRect(10,2,14,17);
+      ctx.fillStyle=palette.l;ctx.fillRect(7,6,8,3);ctx.fillRect(11,3,9,3);ctx.fillRect(23,10,5,3);
+      ctx.fillStyle=palette.o;ctx.fillRect(12,9,10,12);ctx.fillRect(10,12,14,6);
+      ctx.fillStyle=palette.y;ctx.fillRect(14,10,6,10);ctx.fillRect(12,13,10,4);
+      ctx.fillStyle=palette.w;ctx.fillRect(15,11,3,6);ctx.fillRect(14,13,5,2);
+    } else if (kind === 'tower') {
       ctx.fillStyle=palette.a; ctx.fillRect(10,12,12,14);ctx.fillRect(8,20,16,6);
       ctx.fillStyle=palette.h; ctx.fillRect(10,13,3,12);ctx.fillRect(14,18,8,2);
       ctx.fillStyle=palette.g;ctx.fillRect(6,7,22,8);ctx.fillRect(9,4,16,5);
@@ -144,7 +154,9 @@ export function sprite(kind: string, faction: Faction = 'nature'): HTMLCanvasEle
       ctx.fillStyle=palette.l;ctx.fillRect(10,5,10,3);ctx.fillRect(8,10,5,3);ctx.fillRect(17,9,5,2);
       ctx.fillStyle=palette.y;ctx.fillRect(15,12,2,3);
     } else {
+      ctx.fillStyle=palette.o;ctx.fillRect(2,16,29,11);
       ctx.fillStyle=palette.a;ctx.fillRect(4,17,25,7);
+      ctx.fillStyle=palette.h;ctx.fillRect(4,18,25,2);ctx.fillRect(5,23,23,1);
       for(let i=6;i<29;i+=7){ctx.fillRect(i,10,3,16);ctx.fillStyle=palette.l;ctx.fillRect(i-1,9,5,3);ctx.fillStyle=palette.a;}
     }
   }

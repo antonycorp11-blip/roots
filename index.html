@@ -21,10 +21,11 @@
         <button id="soundToggle" class="icon-btn" title="Som" aria-label="Ativar ou desativar som">♪</button>
       </header>
       <section id="prepPanel" class="panel">
-        <div><small>FASE DE PREPARAÇÃO</small><strong>Posicione seu destacamento</strong><p>Escolha uma tropa e toque na zona verde. O inimigo prepara-se em segredo.</p></div>
-        <div class="prep-score"><span>PONTOS</span><b id="prepPoints">24</b></div>
+        <div><small>PREPARE SUA DEFESA</small><strong>Fortifique o território</strong><p>Torres atacam, muros seguram e bosques curam. Toque numa construção para removê-la e recuperar o orçamento. Tropas só chegam na batalha.</p></div>
+        <div class="prep-score"><span>ORÇAMENTO</span><b id="prepPoints">600</b></div>
         <button id="startBattle" class="primary">INICIAR BATALHA <span>▶</span></button>
       </section>
+      <section id="objective"><b>OBJETIVO: DESTRUIR O NÚCLEO INIMIGO</b><span id="coreStatus">Território gera moedas. Só a queda de um núcleo encerra a batalha.</span><button id="enemyCore">Ver núcleo inimigo ↑</button></section>
       <section id="selectionInfo" class="selection-info hidden"></section>
       <aside id="minimapWrap"><canvas id="minimap" width="160" height="240" aria-label="Minimapa"></canvas><span>MAPA TÁTICO</span><div id="zoomControls"><button id="zoomOut" aria-label="Afastar câmera">−</button><b id="zoomLabel">100%</b><button id="zoomIn" aria-label="Aproximar câmera">+</button></div></aside>
       <section id="bottomHud">
