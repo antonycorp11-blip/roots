@@ -1,5 +1,6 @@
 import { BUILDING_DEFS, UNIT_DEFS, buildingKinds, unitKinds } from './defs';
 import { CFG, COLORS, WORLD_H, WORLD_W } from './config';
+import { sprite, terrain } from './pixelArt';
 import type {
   Building, BuildingKind, BuildSlot, Economy, Faction, OrderType, Owner, Particle,
   Phase, Projectile, Reinforcement, Tile, Unit, UnitKind, Vec,
@@ -162,7 +163,7 @@ export class Game {
     const fitWidth = this.minimumZoom();
     this.camera.zoom = clamp(Math.max(.96, fitWidth * 1.42), fitWidth, CFG.maxZoom);
     this.camera.x = WORLD_W / 2 - this.width / this.camera.zoom / 2;
-    this.camera.y = WORLD_H - this.height / this.camera.zoom - 10;
+    this.camera.y = WORLD_H / 2 - this.height / this.camera.zoom * .35;
     this.clampCamera();
     this.prepPanel.classList.remove('hidden');
     this.resultEl.classList.add('hidden');
@@ -180,7 +181,7 @@ export class Game {
   }
 
   private deployStarterArmy(faction: Faction) {
-    const rowY = WORLD_H - CFG.tile * 5.2;
+    const rowY = WORLD_H - CFG.tile * (CFG.initialRows - 2);
     const starters: UnitKind[] = ['warrior', 'warrior', 'archer'];
     starters.forEach((kind, i) => {
       const unit = this.createUnit(faction, kind, WORLD_W / 2 + (i - 1) * 58, rowY + Math.abs(i - 1) * 25);
@@ -193,7 +194,7 @@ export class Game {
     const composition: UnitKind[] = ['warrior', 'warrior', 'archer', 'scout', 'guardian'];
     composition.forEach((kind, i) => {
       const lane = (i % 3 - 1) * 100 + (seeded(i + 99) - .5) * 45;
-      const unit = this.createUnit('corruption', kind, WORLD_W / 2 + lane, CFG.tile * (4.3 + Math.floor(i / 3) * 1.25));
+      const unit = this.createUnit('corruption', kind, WORLD_W / 2 + lane, CFG.tile * (CFG.initialRows - 2 - Math.floor(i / 3) * 1.25));
       unit.pathAngle = seeded(i * 31) * .5 - .25;
       this.units.push(unit);
     });
@@ -415,7 +416,7 @@ export class Game {
 
   private validDeploy(world: Vec, faction: Faction) {
     const inX = world.x > CFG.tile * 2 && world.x < WORLD_W - CFG.tile * 2;
-    const inY = faction === 'nature' ? world.y > WORLD_H - CFG.tile * 8.5 && world.y < WORLD_H - CFG.tile * 2.5 : world.y > CFG.tile * 2.5 && world.y < CFG.tile * 8.5;
+    const inY = this.tileAt(world.x, world.y)?.owner === faction;
     return inX && inY && !this.units.some(unit => !unit.dead && dist2(unit, world) < 25 ** 2);
   }
 
@@ -489,10 +490,10 @@ export class Game {
       const kind = button.dataset.kind!;
       if (type === 'unit') {
         this.selectedCard = this.selectedCard?.type === 'unit' && this.selectedCard.kind === kind ? null : { type, kind: kind as UnitKind };
-        if (this.selectedCard) this.toast(this.phase === 'prep' ? 'Posicione na clareira verde' : 'Escolha um ponto de entrada aliado ao sul');
+        if (this.selectedCard) this.toast(this.phase === 'prep' ? 'Posicione na clareira verde' : 'Posicione em qualquer território aliado seguro');
       } else {
         this.selectedCard = this.selectedCard?.type === 'building' && this.selectedCard.kind === kind ? null : { type, kind: kind as BuildingKind };
-        if (this.selectedCard) this.toast('Escolha uma plataforma aliada nas laterais');
+        if (this.selectedCard) this.toast('Escolha terreno aliado livre para construir');
       }
       this.renderCards();
     }));
@@ -500,24 +501,13 @@ export class Game {
   }
 
   private cardPortrait(kind: UnitKind | BuildingKind) {
-    const building = kind === 'tower' || kind === 'barrier' || kind === 'grove';
-    const shapes: Record<string, string> = {
-      warrior: '<path d="M28 46L31 24 40 18 49 24 52 46Z"/><circle cx="40" cy="15" r="8"/><path class="accent" d="M23 29a10 10 0 1 0 0 20V29Zm34-9 3 3-14 23-4-2Z"/>',
-      archer: '<path d="M30 48 32 25 40 19 48 25 50 48Z"/><circle cx="40" cy="15" r="7"/><path class="line" d="M55 17q-17 15 0 31M55 17v31M40 31h20"/>',
-      scout: '<path d="m22 49 9-28 9-8 10 8 9 28-19-8Z"/><path class="accent" d="m31 16 4-12 6 10 6-10 3 13-10 6Z"/><path class="line" d="m50 29 10 18"/>',
-      guardian: '<path d="M20 50V23l10-12h20l10 12v27Z"/><circle cx="40" cy="14" r="10"/><path class="accent" d="M20 27h40v9H20zM36 5h8v18h-8z"/>',
-      ballista: '<path d="M17 42h46l-7 10H24Z"/><circle cx="27" cy="51" r="7"/><circle cx="53" cy="51" r="7"/><path class="line" d="M40 43V15m-20 8 20-8 20 8M20 23l6 15m34-15-6 15"/><path class="accent" d="m40 9 5 9H35Z"/>',
-      tower: '<path d="M23 54 28 20l12-11 13 11 5 34Z"/><path class="accent" d="m28 20 6 6 6-8 7 8 6-6v13H28Z"/><circle class="glow" cx="40" cy="15" r="7"/>',
-      barrier: '<path d="M11 50q10-36 22-7 10-39 20-3 9-24 16 10Z"/><path class="line" d="M15 47q14-20 26 0m-8-5q13-20 27 3"/>',
-      grove: '<path d="M37 56V31h7v25Z"/><circle cx="27" cy="27" r="14"/><circle cx="43" cy="20" r="17"/><circle cx="55" cy="31" r="13"/><circle class="glow" cx="42" cy="26" r="8"/>',
-    };
-    return `<svg viewBox="0 0 80 60" aria-hidden="true" class="portrait-svg ${building ? 'structure' : ''}"><defs><radialGradient id="halo-${kind}"><stop stop-color="${building ? '#f5c65d' : '#bdf37d'}" stop-opacity=".55"/><stop offset="1" stop-color="#092117" stop-opacity="0"/></radialGradient></defs><rect width="80" height="60" fill="url(#halo-${kind})"/><g>${shapes[kind]}</g></svg>`;
+    return '<img class="pixel-portrait" alt="" src="' + sprite(kind).toDataURL() + '">';
   }
 
   private placeReinforcement(world: Vec, kind: UnitKind) {
     const tile = this.tileAt(world.x, world.y);
-    const valid = tile?.owner === 'nature' && tile.row >= CFG.rows - CFG.reinforceEntryRows - 2;
-    if (!valid) return this.toast('Reforços entram pelo território verde ao sul');
+    const valid = tile?.owner === 'nature' && !this.closestEnemyUnit(world, 'nature', 85);
+    if (!valid) return this.toast('Escolha território aliado seguro, longe de inimigos');
     if (this.queueReinforcement('nature', kind, world)) {
       this.selectedCard = null;
       this.spawnPing(world, '#d4f890');
@@ -534,8 +524,11 @@ export class Game {
     if (this.economy[faction].coins < def.coinCost) { if (faction === 'nature') this.toast('Moedas insuficientes'); return false; }
     this.economy[faction].coins -= def.coinCost;
     this.reinforcementCooldowns[faction][kind] = Math.max(1.2, def.mobilize * .45);
-    const defaultY = faction === 'nature' ? WORLD_H - CFG.tile * 3.7 : CFG.tile * 3.7;
-    const defaultX = WORLD_W / 2 + (seeded(this.nextId * 3.7) - .5) * CFG.tile * 6;
+    const candidates = this.tiles.filter(t => t.owner === faction && Math.abs(t.col - CFG.cols / 2) < 7);
+    candidates.sort((a,b) => faction === 'nature' ? a.row-b.row : b.row-a.row);
+    const forward = candidates.find(t => !this.closestEnemyUnit({x:(t.col+.5)*CFG.tile,y:(t.row+.5)*CFG.tile}, faction, 100));
+    const defaultY = forward ? (forward.row + .5) * CFG.tile : faction === 'nature' ? WORLD_H - 100 : 100;
+    const defaultX = forward ? (forward.col + .5) * CFG.tile : WORLD_W / 2;
     this.queues.push({ faction, kind, remaining: def.mobilize, x: entry?.x ?? defaultX, y: entry?.y ?? defaultY });
     if (faction === 'nature') {
       this.toast(`${def.name} a caminho — ${def.mobilize}s`);
@@ -562,11 +555,14 @@ export class Game {
   private validBuildSlot(slot: BuildSlot, faction: Faction) {
     if (slot.occupied !== null) return false;
     const tile = this.tileAt(slot.x, slot.y);
-    return tile?.owner === faction;
+    return tile?.owner === faction && !this.buildings.some(b => dist2(b, slot) < 65 ** 2) && !this.units.some(u => !u.dead && dist2(u, slot) < 28 ** 2);
   }
 
   private findSlotAt(world: Vec) {
-    return this.slots.find(slot => dist2(slot, world) < 30 ** 2) ?? null;
+    const tile = this.tileAt(world.x, world.y);
+    if (!tile) return null;
+    const x = (tile.col + .5) * CFG.tile, y = (tile.row + .5) * CFG.tile;
+    return this.slots.find(slot => dist2(slot, {x,y}) < 15 ** 2) ?? { id: this.nextId++, x, y, occupied: null };
   }
 
   private formationOffset(index: number, count: number): Vec {
@@ -1187,7 +1183,14 @@ export class Game {
       bottom: this.camera.y + this.height / this.camera.zoom + CFG.tile,
     };
     this.drawTerrain(ctx, bounds);
-    this.drawBuildSlots(ctx, bounds);
+    // Sparse low canopies on the support banks leave combat lanes readable.
+    for(const tile of this.tiles) {
+      if(tile.seed < .78 || (tile.col > 5 && tile.col < CFG.cols-6) || Math.abs(tile.visual)<.6) continue;
+      const p={x:(tile.col+.5)*CFG.tile,y:(tile.row+.5)*CFG.tile};
+      if(!this.visible(p,bounds,80)) continue;
+      ctx.imageSmoothingEnabled=false;
+      ctx.drawImage(sprite('tree',tile.visual>0?'nature':'corruption'),p.x-36,p.y-42,72,72);
+    }
     for (const building of this.buildings) if (this.visible(building, bounds, 70)) this.drawBuilding(ctx, building);
     for (const projectile of this.projectiles) if (this.visible(projectile, bounds, 10)) this.drawProjectile(ctx, projectile);
     const visibleUnits = this.units.filter(unit => this.visible(unit, bounds, 30) && (this.phase !== 'prep' || unit.faction === 'nature'));
@@ -1219,14 +1222,10 @@ export class Game {
       for (let col = minCol; col <= maxCol; col++) {
         const tile = this.tiles[row * CFG.cols + col];
         const x = col * CFG.tile, y = row * CFG.tile;
-        const variation = Math.sin(col * .37 + row * .16) * .018 + Math.cos(row * .29 - col * .11) * .014 + (tile.seed - .5) * .018;
-        const neutral = this.mixColor('#3b382f', '#555043', .5 + variation);
-        const base = tile.visual >= 0
-          ? this.mixColor(neutral, '#1c432f', clamp(tile.visual * .94 + variation, 0, 1))
-          : this.mixColor(neutral, '#281c36', clamp(-tile.visual * .96 - variation, 0, 1));
-        ctx.fillStyle = base;
-        ctx.fillRect(x - .4, y - .4, CFG.tile + .8, CFG.tile + .8);
-        if (this.camera.zoom > .64 || tile.seed > .82) this.drawTileDetail(ctx, tile, x, y);
+        ctx.imageSmoothingEnabled=false;
+        const variant=Math.floor(tile.seed*16);
+        ctx.drawImage(terrain(variant,0),x,y,CFG.tile,CFG.tile);
+        if(Math.abs(tile.visual)>.01){ctx.globalAlpha=Math.abs(tile.visual);ctx.drawImage(terrain(variant,tile.visual>0?1:-1),x,y,CFG.tile,CFG.tile);ctx.globalAlpha=1;}
         if (tile.owner === 'contested') {
           ctx.fillStyle = 'rgba(224,185,96,.09)';
           ctx.fillRect(x, y, CFG.tile, CFG.tile);
@@ -1254,50 +1253,6 @@ export class Game {
     ctx.strokeStyle = 'rgba(197,229,158,.18)'; ctx.lineWidth = 4; ctx.strokeRect(2, 2, WORLD_W - 4, WORLD_H - 4);
   }
 
-  private drawTileDetail(ctx: CanvasRenderingContext2D, tile: Tile, x: number, y: number) {
-    const s = tile.seed;
-    ctx.save();
-    if (tile.visual > .12) {
-      const alpha = clamp(tile.visual, 0, 1);
-      ctx.strokeStyle = `rgba(173,224,111,${.12 + alpha * .28})`;
-      ctx.lineWidth = .85;
-      const count = 1 + Math.floor(s * 4);
-      for (let i = 0; i < count; i++) {
-        const px = x + 6 + seeded(s * 99 + i) * (CFG.tile - 12), py = y + 8 + seeded(s * 177 + i) * (CFG.tile - 16);
-        ctx.beginPath(); ctx.moveTo(px, py + 4); ctx.quadraticCurveTo(px + (i % 2 ? 2.5 : -2.5), py, px + 1, py - 4.5); ctx.stroke();
-      }
-      if (s > .74 && tile.visual > .5) {
-        const px = x + 11 + seeded(s * 22) * 21, py = y + 12 + seeded(s * 37) * 18;
-        ctx.fillStyle = `rgba(6,21,14,${.38 * alpha})`; ctx.beginPath(); ctx.ellipse(px + 2, py + 5, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = `rgba(41,91,48,${.9 * alpha})`; ctx.beginPath(); ctx.arc(px - 4, py, 6.5, 0, Math.PI * 2); ctx.arc(px + 4, py - 3, 7.5, 0, Math.PI * 2); ctx.arc(px + 8, py + 3, 5.5, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = `rgba(105,157,67,${.75 * alpha})`; ctx.beginPath(); ctx.arc(px + 2, py - 5, 3.5, 0, Math.PI * 2); ctx.fill();
-      } else if (s < .12 && tile.visual > .65) {
-        ctx.fillStyle = `rgba(246,213,121,${.9 * alpha})`; ctx.beginPath(); ctx.arc(x + 10 + s * 100, y + 15, 1.6, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = `rgba(208,114,146,${.75 * alpha})`; ctx.beginPath(); ctx.arc(x + 14 + s * 80, y + 19, 1.2, 0, Math.PI * 2); ctx.fill();
-      }
-      if (s > .42 && s < .55 && tile.visual > .72) {
-        ctx.strokeStyle = `rgba(118,166,79,${.22 * alpha})`; ctx.lineWidth = 1.2;
-        ctx.beginPath(); ctx.moveTo(x - 2, y + 32); ctx.bezierCurveTo(x + 12, y + 20, x + 24, y + 44, x + 46, y + 26); ctx.stroke();
-      }
-    } else if (tile.visual < -.12) {
-      const alpha = clamp(-tile.visual, 0, 1);
-      ctx.strokeStyle = `rgba(177,91,208,${.2 + alpha * .34})`;
-      ctx.lineWidth = 1;
-      const sx = x + 7 + seeded(s * 91) * 26, sy = y + 5 + seeded(s * 81) * 28;
-      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + 6, sy + 6); ctx.lineTo(sx + 1, sy + 12); ctx.lineTo(sx + 9, sy + 19); ctx.moveTo(sx + 2, sy + 11); ctx.lineTo(sx - 5, sy + 15); ctx.stroke();
-      if (s > .76 && tile.visual < -.5) {
-        ctx.fillStyle = `rgba(122,54,151,${.8 * alpha})`;
-        ctx.beginPath(); ctx.moveTo(x + 29, y + 8); ctx.lineTo(x + 35, y + 28); ctx.lineTo(x + 25, y + 25); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = `rgba(211,111,235,${.55 * alpha})`; ctx.beginPath(); ctx.moveTo(x + 29, y + 9); ctx.lineTo(x + 31, y + 23); ctx.lineTo(x + 28, y + 20); ctx.closePath(); ctx.fill();
-      }
-    } else {
-      ctx.fillStyle = 'rgba(211,192,148,.13)';
-      const px = x + 7 + s * 28, py = y + 9 + seeded(s * 44) * 25;
-      ctx.beginPath(); ctx.ellipse(px, py, 3 + s * 2.5, 1.7 + s, s * 3, 0, Math.PI * 2); ctx.fill();
-      if (s > .87) { ctx.fillStyle = 'rgba(24,23,20,.2)'; ctx.beginPath(); ctx.arc(x + 14, y + 31, 4, 0, Math.PI * 2); ctx.fill(); }
-    }
-    ctx.restore();
-  }
 
   private drawTerritorySeam(ctx: CanvasRenderingContext2D, a: Tile, b: Tile, x: number, y: number, vertical: boolean) {
     const owner = a.owner === 'contested' ? b.owner : a.owner;
@@ -1311,17 +1266,17 @@ export class Game {
   }
 
   private drawDeploymentZone(ctx: CanvasRenderingContext2D) {
-    const x = CFG.tile * 2, y = WORLD_H - CFG.tile * 8.5, w = WORLD_W - CFG.tile * 4, h = CFG.tile * 6;
+    const x = CFG.tile * 2, y = WORLD_H - CFG.tile * CFG.initialRows, w = WORLD_W - CFG.tile * 4, h = CFG.tile * (CFG.initialRows - 1);
     ctx.fillStyle = 'rgba(115,201,94,.075)'; ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = 'rgba(170,236,126,.72)'; ctx.lineWidth = 2; ctx.setLineDash([10, 7]); ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(202,241,169,.65)'; ctx.font = '700 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText('ZONA DE POSICIONAMENTO', WORLD_W / 2, y + 21);
   }
 
   private drawReinforcementZone(ctx: CanvasRenderingContext2D) {
-    const y = WORLD_H - CFG.tile * (CFG.reinforceEntryRows + 2);
+    const y = Math.min(...this.tiles.filter(t => t.owner === 'nature').map(t => t.row * CFG.tile));
     const pulse = .55 + Math.sin(this.battleTime * 4) * .18;
     ctx.fillStyle = `rgba(127,220,106,${.055 + pulse * .035})`;
-    ctx.fillRect(0, y, WORLD_W, WORLD_H - y);
+    for (const tile of this.tiles) if (tile.owner === 'nature') ctx.fillRect(tile.col * CFG.tile, tile.row * CFG.tile, CFG.tile, CFG.tile);
     ctx.strokeStyle = `rgba(192,246,143,${pulse})`;
     ctx.lineWidth = 2 / this.camera.zoom;
     ctx.setLineDash([12 / this.camera.zoom, 8 / this.camera.zoom]);
@@ -1368,122 +1323,24 @@ export class Game {
   }
 
   private drawBuildingShape(ctx: CanvasRenderingContext2D, building: Building) {
-    const nature = building.faction === 'nature';
-    ctx.save(); ctx.translate(building.x, building.y);
-    ctx.fillStyle = '#0005'; ctx.beginPath(); ctx.ellipse(3, 8, building.kind === 'core' ? 42 : 25, building.kind === 'core' ? 22 : 13, 0, 0, Math.PI * 2); ctx.fill();
-    if (building.kind === 'core') {
-      ctx.strokeStyle = nature ? '#4e713d' : '#5d3b70'; ctx.lineWidth = 9;
-      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 12, Math.sin(a) * 8); ctx.quadraticCurveTo(Math.cos(a + .25) * 33, Math.sin(a + .25) * 25, Math.cos(a) * 39, Math.sin(a) * 30); ctx.stroke(); }
-      ctx.fillStyle = building.hitFlash ? '#fff' : nature ? '#9edb6a' : '#9d58bd'; ctx.beginPath(); ctx.arc(0, -4, 25, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = nature ? '#d3f3a3' : '#e2a0ef'; ctx.beginPath(); ctx.arc(-6, -11, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = nature ? '#426d37' : '#43254f'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, -4, 31, 0, Math.PI * 2); ctx.stroke();
-    } else if (building.kind === 'tower') {
-      ctx.fillStyle = nature ? '#4c6538' : '#43314e'; ctx.beginPath(); ctx.moveTo(-18, 15); ctx.lineTo(-11, -17); ctx.lineTo(0, -26); ctx.lineTo(12, -15); ctx.lineTo(18, 15); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = building.hitFlash ? '#fff' : nature ? '#b6df73' : '#c176df'; ctx.beginPath(); ctx.arc(0, -22, 7, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = nature ? '#789d55' : '#85549c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-14, 8); ctx.quadraticCurveTo(0, -1, 14, 8); ctx.stroke();
-    } else if (building.kind === 'barrier') {
-      ctx.strokeStyle = building.hitFlash ? '#fff' : nature ? '#765c35' : '#5b356d'; ctx.lineWidth = 8; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(-23, 10); ctx.quadraticCurveTo(-10, -16, 0, 8); ctx.quadraticCurveTo(11, -17, 23, 8); ctx.stroke();
-      ctx.strokeStyle = nature ? '#91b95b' : '#a057bd'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-20, 7); ctx.lineTo(-5, -7); ctx.lineTo(6, 5); ctx.lineTo(20, -3); ctx.stroke();
-    } else {
-      ctx.fillStyle = nature ? '#345b35' : '#44304f';
-      for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; ctx.beginPath(); ctx.arc(Math.cos(a) * 12, Math.sin(a) * 8 - 4, 10, 0, Math.PI * 2); ctx.fill(); }
-      ctx.fillStyle = building.hitFlash ? '#fff' : nature ? '#8fcf61' : '#a65fc3'; ctx.beginPath(); ctx.arc(0, -7, 10, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = nature ? '#b9e68488' : '#d68bea88'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, -4, 27 + Math.sin(this.battleTime * 2) * 2, 0, Math.PI * 2); ctx.stroke();
-    }
+    ctx.save();ctx.imageSmoothingEnabled=false;
+    const size=building.kind==='core'?112:80;
+    ctx.globalAlpha *= .4+building.build*.6;
+    ctx.drawImage(sprite(building.kind,building.faction),Math.round(building.x-size/2),Math.round(building.y-size/2),size,size);
     ctx.restore();
   }
 
   private drawUnit(ctx: CanvasRenderingContext2D, unit: Unit) {
-    const def = UNIT_DEFS[unit.faction][unit.kind];
-    const nature = unit.faction === 'nature';
-    ctx.save(); ctx.translate(unit.x, unit.y);
-    if (!unit.dead) {
-      ctx.fillStyle = nature ? 'rgba(143,229,89,.14)' : 'rgba(204,91,235,.16)';
-      ctx.beginPath(); ctx.ellipse(0, 4, def.radius + 13 + Math.sin(unit.anim) * .8, def.radius * .75 + 9, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    if (unit.selected) {
-      ctx.fillStyle = 'rgba(213,255,157,.11)'; ctx.strokeStyle = '#dcffa4'; ctx.lineWidth = 2.2; ctx.setLineDash([5, 3]);
-      ctx.beginPath(); ctx.ellipse(0, 4, def.radius + 15, def.radius + 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
-    }
-    if (unit.dead) { ctx.globalAlpha = clamp(1 - unit.dead / .85, 0, 1); ctx.rotate(unit.faction === 'nature' ? 1.2 : -1.2); }
-    else ctx.rotate(unit.pathAngle + Math.PI / 2);
-    const scale = unit.kind === 'guardian' ? 1.5 : unit.kind === 'ballista' ? 1.42 : 1.56;
-    ctx.scale(scale, scale);
-    ctx.fillStyle = 'rgba(0,4,2,.5)'; ctx.beginPath(); ctx.ellipse(2, 8, def.radius + 5, def.radius * .62 + 2, 0, 0, Math.PI * 2); ctx.fill();
-    const walk = unit.dead ? 0 : Math.sin(unit.anim * 2) * 3;
-    const attack = unit.cooldown > Math.max(0, def.cooldown - .2) ? .9 : 0;
-    if (unit.kind === 'warrior') this.drawWarrior(ctx, nature, walk, attack, unit.hitFlash > 0);
-    else if (unit.kind === 'archer') this.drawArcher(ctx, nature, walk, attack, unit.hitFlash > 0);
-    else if (unit.kind === 'scout') this.drawScout(ctx, nature, walk, attack, unit.hitFlash > 0);
-    else if (unit.kind === 'guardian') this.drawGuardian(ctx, nature, walk, attack, unit.hitFlash > 0);
-    else this.drawBallista(ctx, nature, walk, attack, unit.hitFlash > 0);
+    const size = unit.kind === 'guardian' ? 80 : unit.kind === 'ballista' ? 72 : 64;
+    ctx.save(); ctx.translate(Math.round(unit.x), Math.round(unit.y));ctx.imageSmoothingEnabled=false;
+    if(unit.dead) ctx.globalAlpha=Math.max(0,1-unit.dead/.85);
+    ctx.fillStyle='#081b2266';ctx.fillRect(-size*.26,10,size*.52,9);
+    if(unit.selected){ctx.strokeStyle='#eedb95';ctx.lineWidth=2;ctx.strokeRect(-22,-19,44,40);}
+    const bob=!unit.dead && !unit.targetId && unit.order!=='hold'?Math.floor(Math.sin(unit.anim*3)*1.5):0;
+    ctx.drawImage(sprite(unit.kind,unit.faction),-size/2,-size/2-4+bob,size,size);
+    if(unit.hitFlash>0){ctx.globalAlpha=unit.hitFlash*.35;ctx.fillStyle='#fff4cc';ctx.fillRect(-9,-15,18,22);}
     ctx.restore();
-    if (!unit.dead && (unit.hp < unit.maxHp || unit.selected)) this.drawHealthBar(ctx, unit.x, unit.y - def.radius * 1.4 - 23, unit.hp / unit.maxHp, def.radius * 2.8 + 12);
-  }
-
-  private drawWarrior(ctx: CanvasRenderingContext2D, nature: boolean, walk: number, attack: number, hit: boolean) {
-    const outline = nature ? '#152b20' : '#26132e', cloth = hit ? '#fff' : nature ? '#287355' : '#71367d', dark = nature ? '#194735' : '#48224f', accent = nature ? '#b9e870' : '#e27af1', skin = nature ? '#e7bb78' : '#c88bd2';
-    this.drawCapeAndBoots(ctx, nature, walk, cloth, dark, outline);
-    ctx.fillStyle = cloth; ctx.strokeStyle = outline; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.roundRect(-7, -8, 14, 17, 5); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = accent; ctx.fillRect(-6, -2, 12, 3); ctx.fillStyle = dark; ctx.fillRect(-5, 3, 10, 2);
-    ctx.save(); ctx.translate(8, -1); ctx.rotate(-.5 - attack * .55); ctx.strokeStyle = outline; ctx.lineWidth = 4.5; ctx.beginPath(); ctx.moveTo(0, 1); ctx.lineTo(8, -8); ctx.stroke(); ctx.strokeStyle = nature ? '#edf0cb' : '#efb2fa'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(7, -7); ctx.lineTo(13, -17); ctx.stroke(); ctx.fillStyle = accent; ctx.beginPath(); ctx.moveTo(11, -18); ctx.lineTo(16, -21); ctx.lineTo(13, -15); ctx.closePath(); ctx.fill(); ctx.restore();
-    ctx.fillStyle = dark; ctx.strokeStyle = outline; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.ellipse(-9, 0, 7, 8.5, -.18, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = accent; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.arc(-9, 0, 4.2, -.9, 2.1); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-12, 1); ctx.quadraticCurveTo(-9, -3, -6, 1); ctx.stroke();
-    this.drawHead(ctx, nature, skin, outline, accent, 'helm');
-  }
-
-  private drawArcher(ctx: CanvasRenderingContext2D, nature: boolean, walk: number, attack: number, hit: boolean) {
-    const outline = nature ? '#12291d' : '#27132f', cloth = hit ? '#fff' : nature ? '#2e7250' : '#6b3479', dark = nature ? '#173e2d' : '#3d2149', accent = nature ? '#e2c26c' : '#dc83ee', skin = nature ? '#e5bd80' : '#c28dce';
-    this.drawCapeAndBoots(ctx, nature, walk, cloth, dark, outline);
-    ctx.strokeStyle = outline; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-6, 7); ctx.lineTo(-11, -10); ctx.stroke();
-    for (let i = 0; i < 3; i++) { ctx.strokeStyle = accent; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(-11 + i * 2, -9); ctx.lineTo(-14 + i * 2, -16); ctx.stroke(); }
-    ctx.fillStyle = cloth; ctx.strokeStyle = outline; ctx.lineWidth = 1.7; ctx.beginPath(); ctx.moveTo(-7, 8); ctx.lineTo(-6, -8); ctx.quadraticCurveTo(0, -12, 6, -8); ctx.lineTo(7, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.save(); ctx.translate(8, -1); ctx.rotate(-attack * .25); ctx.strokeStyle = accent; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.arc(0, -2, 10, -1.45, 1.45); ctx.stroke(); ctx.strokeStyle = '#e9e2c2'; ctx.lineWidth = .8; ctx.beginPath(); ctx.moveTo(1, -12); ctx.lineTo(1, 8); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-4, -2); ctx.lineTo(13, -2); ctx.stroke(); ctx.fillStyle = accent; ctx.beginPath(); ctx.moveTo(14, -2); ctx.lineTo(10, -5); ctx.lineTo(10, 1); ctx.closePath(); ctx.fill(); ctx.restore();
-    this.drawHead(ctx, nature, skin, outline, accent, 'hood');
-  }
-
-  private drawScout(ctx: CanvasRenderingContext2D, nature: boolean, walk: number, attack: number, hit: boolean) {
-    const outline = nature ? '#12281d' : '#28132f', cloth = hit ? '#fff' : nature ? '#347e58' : '#773985', dark = nature ? '#173d2c' : '#43204c', accent = nature ? '#c8ef76' : '#ec7cf5', skin = nature ? '#e9be7b' : '#cb8bd5';
-    ctx.fillStyle = dark; ctx.strokeStyle = outline; ctx.lineWidth = 1.7; ctx.beginPath(); ctx.moveTo(0, -8); ctx.quadraticCurveTo(-13, 1, -10 + walk, 15); ctx.lineTo(0, 10); ctx.lineTo(10 - walk, 15); ctx.quadraticCurveTo(13, 1, 0, -8); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = cloth; ctx.beginPath(); ctx.roundRect(-6, -8, 12, 16, 5); ctx.fill(); ctx.stroke();
-    for (const side of [-1, 1]) { ctx.save(); ctx.translate(side * 7, 0); ctx.rotate(side * (.65 + attack * .45)); ctx.strokeStyle = outline; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(side * 5, -6); ctx.stroke(); ctx.strokeStyle = nature ? '#f0e7bc' : '#efadf7'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(side * 4, -5); ctx.lineTo(side * 10, -13); ctx.stroke(); ctx.restore(); }
-    this.drawHead(ctx, nature, skin, outline, accent, 'scout');
-  }
-
-  private drawGuardian(ctx: CanvasRenderingContext2D, nature: boolean, walk: number, attack: number, hit: boolean) {
-    const outline = nature ? '#18301d' : '#28152f', bark = hit ? '#fff' : nature ? '#567544' : '#5b3566', dark = nature ? '#324a2e' : '#3b2345', glow = nature ? '#c8ef78' : '#ed82f7';
-    ctx.strokeStyle = outline; ctx.lineCap = 'round'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(-5, 5); ctx.lineTo(-8 + walk, 15); ctx.moveTo(5, 5); ctx.lineTo(8 - walk, 15); ctx.stroke();
-    ctx.fillStyle = bark; ctx.strokeStyle = outline; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-12, 8); ctx.lineTo(-14, -5); ctx.lineTo(-8, -13); ctx.lineTo(0, -10); ctx.lineTo(8, -14); ctx.lineTo(14, -5); ctx.lineTo(11, 9); ctx.closePath(); ctx.fill(); ctx.stroke();
-    for (const side of [-1, 1]) { ctx.save(); ctx.translate(side * 10, -2); ctx.rotate(side * (.22 + attack * .35)); ctx.strokeStyle = outline; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(side * 9, 9); ctx.stroke(); ctx.strokeStyle = bark; ctx.lineWidth = 5; ctx.stroke(); ctx.restore(); }
-    ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(-8, -9); ctx.lineTo(-12, -19); ctx.lineTo(-3, -13); ctx.lineTo(0, -22); ctx.lineTo(4, -13); ctx.lineTo(13, -18); ctx.lineTo(8, -7); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, -9, 4.2, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = glow; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(-4, 3); ctx.lineTo(1, 1); ctx.lineTo(5, 7); ctx.stroke();
-    if (!nature) { ctx.fillStyle = glow; for (const x of [-10, 10]) { ctx.beginPath(); ctx.moveTo(x, -7); ctx.lineTo(x + (x < 0 ? -4 : 4), -16); ctx.lineTo(x + (x < 0 ? 2 : -2), -12); ctx.closePath(); ctx.fill(); } }
-  }
-
-  private drawBallista(ctx: CanvasRenderingContext2D, nature: boolean, walk: number, attack: number, hit: boolean) {
-    const outline = nature ? '#271f16' : '#28152e', wood = hit ? '#fff' : nature ? '#8b6539' : '#68406f', dark = nature ? '#4c3827' : '#42274a', glow = nature ? '#ccec73' : '#e27bef';
-    ctx.fillStyle = '#111a'; ctx.beginPath(); ctx.ellipse(0, 8, 17, 7, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = dark; ctx.strokeStyle = outline; ctx.lineWidth = 2; for (const x of [-10, 10]) { ctx.beginPath(); ctx.arc(x, 8, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.strokeStyle = glow; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 4, 8); ctx.lineTo(x + 4, 8); ctx.moveTo(x, 4); ctx.lineTo(x, 12); ctx.stroke(); ctx.strokeStyle = outline; ctx.lineWidth = 2; }
-    ctx.fillStyle = wood; ctx.beginPath(); ctx.roundRect(-13, -2, 26, 12, 4); ctx.fill(); ctx.stroke();
-    ctx.save(); ctx.translate(0, -3); ctx.rotate(Math.sin(attack) * .08); ctx.strokeStyle = outline; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(-17, -8); ctx.lineTo(0, -14); ctx.lineTo(17, -8); ctx.stroke(); ctx.strokeStyle = glow; ctx.lineWidth = 2.4; ctx.stroke(); ctx.strokeStyle = '#efe7c1'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-17, -8); ctx.lineTo(17, -8); ctx.stroke(); ctx.strokeStyle = wood; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(0, -19); ctx.stroke(); ctx.fillStyle = glow; ctx.beginPath(); ctx.moveTo(0, -23); ctx.lineTo(-4, -15); ctx.lineTo(4, -15); ctx.closePath(); ctx.fill(); ctx.restore();
-  }
-
-  private drawCapeAndBoots(ctx: CanvasRenderingContext2D, nature: boolean, walk: number, cloth: string, dark: string, outline: string) {
-    ctx.fillStyle = dark; ctx.strokeStyle = outline; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(0, -8); ctx.quadraticCurveTo(-11, 0, -8 + walk * .35, 13); ctx.lineTo(0, 9); ctx.lineTo(8 - walk * .35, 13); ctx.quadraticCurveTo(11, 0, 0, -8); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = nature ? '#3a2b20' : '#29182f'; ctx.strokeStyle = outline; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.roundRect(-6 + walk * .3, 7, 5, 7, 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.roundRect(1 - walk * .3, 7, 5, 7, 2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = cloth;
-  }
-
-  private drawHead(ctx: CanvasRenderingContext2D, nature: boolean, skin: string, outline: string, accent: string, style: 'helm' | 'hood' | 'scout') {
-    ctx.fillStyle = skin; ctx.strokeStyle = outline; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(0, -11, 6.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = nature ? '#173f2d' : '#3c1f47';
-    if (style === 'hood') { ctx.beginPath(); ctx.arc(0, -12, 7.6, Math.PI, Math.PI * 2); ctx.lineTo(6, -7); ctx.quadraticCurveTo(0, -11, -6, -7); ctx.closePath(); ctx.fill(); ctx.stroke(); }
-    else if (style === 'helm') { ctx.beginPath(); ctx.arc(0, -12, 6.7, Math.PI, Math.PI * 2); ctx.lineTo(6, -10); ctx.lineTo(-6, -10); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle = accent; ctx.beginPath(); ctx.moveTo(-1, -17); ctx.quadraticCurveTo(3, -22, 8, -21); ctx.quadraticCurveTo(5, -16, 0, -14); ctx.closePath(); ctx.fill(); }
-    else { ctx.beginPath(); ctx.moveTo(-7, -9); ctx.lineTo(-5, -20); ctx.lineTo(0, -15); ctx.lineTo(6, -20); ctx.lineTo(7, -9); ctx.quadraticCurveTo(0, -15, -7, -9); ctx.fill(); ctx.stroke(); }
-    ctx.fillStyle = nature ? '#efffb0' : '#ffb4ff'; ctx.beginPath(); ctx.arc(-2, -11, 1.1, 0, Math.PI * 2); ctx.arc(2, -11, 1.1, 0, Math.PI * 2); ctx.fill();
+    if(!unit.dead && (unit.hp<unit.maxHp || unit.selected)) this.drawHealthBar(ctx,unit.x,unit.y-32,unit.hp/unit.maxHp,32);
   }
 
   private drawHealthBar(ctx: CanvasRenderingContext2D, x: number, y: number, ratio: number, width: number) {

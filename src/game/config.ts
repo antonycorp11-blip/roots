@@ -1,10 +1,10 @@
 export const CFG = {
   cols: 40,
-  rows: 72,
+  rows: 48,
   tile: 44,
-  maxUnits: 60,
+  maxUnits: 240,
   startingCoins: 90,
-  coinPerTile: 0.06,
+  coinPerTile: 0.004,
   prepPoints: 24,
   captureSeconds: 1.8,
   aiTick: 0.7,
@@ -15,7 +15,7 @@ export const CFG = {
   victoryHold: 15,
   coreHp: 1500,
   reinforceEntryRows: 6,
-  initialRows: 9,
+  initialRows: 22,
   maxParticles: 260,
 } as const;
 
