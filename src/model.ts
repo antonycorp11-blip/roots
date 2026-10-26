@@ -24,8 +24,8 @@ export function createGame(seed=Math.floor(Math.random()*1e9),cycle=1,knowledge:
  }
  const cx=Math.floor(W/2);for(let y=SURFACE;y<=SURFACE+1;y++)for(let x=cx-2;x<=cx+2;x++)cell({cells} as Game,x,y).material='empty';
  for(let x=cx-2;x<=cx+2;x++)cell({cells} as Game,x,SURFACE+1).material='empty';
- cell({cells} as Game,cx,SURFACE+1).structure='door';
- const g:Game={version:1,seed,cycle,cells,jobs:[],nextJob:1,stock:{wood:42,stone:24,concrete:32,steel:26,parts:24,fuel:30,food:28,water:24},worker:{x:cx+.5,y:SURFACE-.6,tx:cx+.5,ty:SURFACE-.6,path:[],energy:100,health:100,hunger:0,thirst:0,jobId:null,step:0,state:'idle'},hours:0,speed:1,phase:'prep',blastClock:0,survivalHours:0,oxygen:100,power:0,generated:0,log:[],knowledge,cause:'',camera:{x:cx*TILE-450,y:2*TILE,zoom:1},selected:null,tick:0};
+ cell({cells} as Game,cx+2,SURFACE+1).structure='door';
+ const g:Game={version:1,seed,cycle,cells,jobs:[],nextJob:1,stock:{wood:42,stone:24,concrete:32,steel:26,parts:24,fuel:30,food:28,water:24},worker:{x:cx+.5,y:SURFACE-.6,tx:cx+.5,ty:SURFACE-.6,path:[],energy:100,health:100,hunger:0,thirst:0,jobId:null,step:0,state:'idle'},hours:0,speed:1,phase:'prep',blastClock:0,survivalHours:0,oxygen:100,power:0,generated:0,log:[],knowledge,cause:'',camera:{x:cx*TILE-450,y:2*TILE,zoom:1.22},selected:null,tick:0};
  log(g,'O relógio voltou. Restam 7 dias até a detonação.');return g;
 }
 export function canAfford(s:Stock,c:Partial<Stock>){return (Object.keys(c) as (keyof Stock)[]).every(k=>s[k]>=(c[k]||0))}
